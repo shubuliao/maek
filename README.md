@@ -11,16 +11,18 @@
 
 **Democratizing access to institutional-grade fixed income investments through decentralized finance.**
 
-MAEK enables anyone, regardless of geographic location or financial status, to access high-quality fixed income investment opportunities traditionally reserved for institutional investors. Built on Solana, our protocol offers transparency, permissionless access, and competitive yields from U.S. Treasury bill investments.
+MAEK enables anyone, regardless of geographic location or financial status, to access high-quality fixed income investment opportunities traditionally reserved for institutional investors. Built on Solana, our protocol offers transparency, permissionless access, and competitive yields from a diversified portfolio of **fixed income assets** including treasury bills, corporate bonds, and other investment-grade securities.
 
 ## 🎯 Key Features
 
 - **🔓 Permissionless Access**: No minimum investment requirements or geographic restrictions
-- **💰 Competitive Yields**: Target 4-5% APY from U.S. Treasury bill investments
+- **💰 Competitive Yields**: Target 4-5% APY from diversified fixed income investments
+- **📊 Multi-Asset Portfolio**: Treasury bills, corporate bonds, CDs, and other investment-grade securities
 - **⚡ Low Fees**: Solana's low transaction costs make small investments economical
 - **🔍 Full Transparency**: All holdings and performance data available on-chain
-- **🏛️ Institutional Grade**: Professional fund management with retail accessibility
+- **🏛️ Institutional Grade**: Professional asset management with retail accessibility
 - **🗳️ Decentralized Governance**: Community-controlled protocol parameters
+- **🔄 Dynamic Allocation**: Automated portfolio rebalancing across asset classes
 
 ## 🏗️ Architecture Overview
 
@@ -249,6 +251,7 @@ We welcome contributions from the community! Please see our [Contributing Guidel
 | Total Value Locked | $10M | $100M | $1B |
 | Unique Users | 1,000 | 10,000 | 100,000 |
 | Annual Yield | 4-5% | 4-5% | 5-6% |
+| Asset Classes | 3 | 8 | 15+ |
 | Security Incidents | 0 | 0 | 0 |
 
 ## 🌍 Community
