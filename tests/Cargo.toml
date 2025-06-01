@@ -1,0 +1,10 @@
+[package]
+name = "maek-tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[[bin]]
+name = "run_tests"
+path = "unit_tests.rs" 
