@@ -17,7 +17,7 @@ To build and maintain a decentralized protocol that:
 
 ## What We're Building
 
-### Core Product: Open BUIDL Protocol
+### Core Product: MAEK Protocol
 
 A decentralized protocol on Solana that allows users to:
 
@@ -235,7 +235,7 @@ Building on Solana provides unique benefits:
 ## Long-term Vision
 
 ### 5-Year Outlook
-By 2029, Open BUIDL Protocol aims to be:
+By 2029, MAEK aims to be:
 - The leading DeFi protocol for fixed income investments
 - A bridge between traditional finance and DeFi
 - A standard for transparency and governance in asset management

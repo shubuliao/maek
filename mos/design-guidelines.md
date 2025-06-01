@@ -1,7 +1,7 @@
 # Design Guidelines
 
 ## Overview
-This document outlines the design principles and guidelines for the open source BUIDL protocol - a decentralized alternative to BlackRock's BUIDL fund that democratizes access to fixed income investments on Solana.
+This document outlines the design principles and guidelines for MAEK - a decentralized alternative to BlackRock's BUIDL fund that democratizes access to fixed income investments on Solana.
 
 ## Core Design Principles
 

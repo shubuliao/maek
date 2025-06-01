@@ -1,0 +1,97 @@
+{
+  "name": "maek",
+  "version": "0.1.0",
+  "description": "An open-source, decentralized alternative to BlackRock's BUIDL fund built on Solana",
+  "keywords": [
+    "solana",
+    "defi",
+    "treasury-bills",
+    "fixed-income",
+    "finance",
+    "blockchain",
+    "anchor"
+  ],
+  "author": "MAEK Community",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maek-finance/maek.git"
+  },
+  "homepage": "https://maek.finance",
+  "bugs": {
+    "url": "https://github.com/maek-finance/maek/issues"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "workspaces": [
+    "frontend/*",
+    "tests"
+  ],
+  "scripts": {
+    "build": "anchor build",
+    "test": "anchor test",
+    "test:unit": "anchor test --skip-deploy",
+    "test:integration": "npm run test:integration --workspaces",
+    "test:e2e": "npm run test:e2e --workspaces",
+    "deploy:devnet": "anchor deploy --provider.cluster devnet",
+    "deploy:mainnet": "anchor deploy --provider.cluster mainnet",
+    "dev:investor": "npm run dev --workspace=frontend/investor",
+    "dev:admin": "npm run dev --workspace=frontend/admin",
+    "build:frontend": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "lint:fix": "npm run lint:fix --workspaces",
+    "format": "prettier --write . && cargo fmt",
+    "audit": "npm audit && cargo audit",
+    "clean": "anchor clean && npm run clean --workspaces",
+    "docs:build": "typedoc",
+    "docs:serve": "http-server docs/build",
+    "setup": "npm install && cd programs/buidl-protocol && cargo build",
+    "validator": "solana-test-validator",
+    "keys:generate": "solana-keygen new",
+    "airdrop": "solana airdrop 2"
+  },
+  "devDependencies": {
+    "@coral-xyz/anchor": "^0.28.0",
+    "@solana/web3.js": "^1.78.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "prettier": "^3.0.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "husky": "^8.0.0",
+    "lint-staged": "^14.0.0",
+    "typedoc": "^0.25.0",
+    "http-server": "^14.0.0",
+    "concurrently": "^8.0.0"
+  },
+  "dependencies": {
+    "@solana/spl-token": "^0.3.8",
+    "@project-serum/anchor": "^0.25.0",
+    "dotenv": "^16.0.0"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged",
+      "pre-push": "npm run test:unit"
+    }
+  },
+  "lint-staged": {
+    "*.{js,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{rs}": [
+      "cargo fmt --"
+    ],
+    "*.{md,json,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "funding": {
+    "type": "community",
+    "url": "https://github.com/sponsors/maek-finance"
+  }
+} 
