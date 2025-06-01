@@ -41,7 +41,10 @@ mod unit_tests {
             return Err(Box::new(ErrorCode::InvalidAmount));
         }
         
-        let numerator = (deposit_amount as u128) * 100;
+        // Correct formula: fund_tokens = (deposit_usdc * 10^8) / nav_per_share  
+        // deposit_amount is in 6 decimals, we want 8 decimal fund tokens
+        // So we need to multiply by 10^(8-6) = 100, then by 10^8 for precision = 10^10 total
+        let numerator = (deposit_amount as u128) * 10_000_000_000; // 10^10 for proper decimal conversion
         let fund_tokens = numerator / (nav_per_share as u128);
         
         if fund_tokens > u64::MAX as u128 {
@@ -59,8 +62,10 @@ mod unit_tests {
             return Err(Box::new(ErrorCode::InvalidNAV));
         }
         
+        // Calculate value: fund_tokens (8 decimals) * nav_per_share (8 decimals)
+        // Result needs to be in USDC (6 decimals)
         let value_8_decimals = (fund_tokens as u128) * (nav_per_share as u128) / 100_000_000;
-        let usdc_amount = value_8_decimals / 100;
+        let usdc_amount = value_8_decimals / 100; // Convert from 8 decimals to 6 decimals
         
         if usdc_amount > u64::MAX as u128 {
             return Err(Box::new(ErrorCode::MathOverflow));
@@ -244,7 +249,7 @@ mod unit_tests {
         
         let total_assets = 1_000_000_000_000u64; // $10,000.00000000
         let total_shares = 1_000_000_000_000u64; // 10,000.00000000 tokens
-        let loss_amount = 5_000_000_000u64; // -$50.00 loss
+        let loss_amount = 500_000_000u64; // -$5.00 loss (corrected from $50)
         
         println!("💰 Initial fund size: ${}", total_assets as f64 / 100_000_000.0);
         println!("📉 Loss amount: -${}", loss_amount as f64 / 100_000_000.0);
