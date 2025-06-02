@@ -93,7 +93,7 @@ pub struct FixedIncomeAsset {
     pub currency: u8,
     
     /// Reserved space
-    pub reserved: [u8; 32],
+    pub reserved: [u8; 8],
     
     /// Account bump
     pub bump: u8,
@@ -119,7 +119,7 @@ impl FixedIncomeAsset {
         1 + // sector
         1 + // country
         1 + // currency
-        32 + // reserved
+        8 + // reserved
         1; // bump
 }
 

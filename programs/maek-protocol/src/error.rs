@@ -63,12 +63,29 @@ pub enum ErrorCode {
     #[msg("Management fee exceeds maximum allowed rate")]
     FeeTooHigh,
     
+    // Liquidity Errors
+    #[msg("Liquidity ratio is too low")]
+    LiquidityTooLow,
+    
+    #[msg("Liquidity ratio is too high")]
+    LiquidityTooHigh,
+    
+    #[msg("Invalid liquidity ratio")]
+    InvalidLiquidityRatio,
+    
+    // Operation Frequency Errors
+    #[msg("Operation attempted too frequently")]
+    OperationTooFrequent,
+    
     // Fixed Income Asset Errors
     #[msg("Invalid fixed income asset type")]
     InvalidAssetType,
     
     #[msg("Asset maturity date is invalid")]
     InvalidMaturityDate,
+    
+    #[msg("Asset has already matured")]
+    AssetAlreadyMatured,
     
     #[msg("Credit rating is invalid or not supported")]
     InvalidCreditRating,
@@ -82,6 +99,12 @@ pub enum ErrorCode {
     // Portfolio Management Errors
     #[msg("Portfolio concentration limit exceeded")]
     ConcentrationLimitExceeded,
+    
+    #[msg("Portfolio concentration exceeded")]
+    PortfolioConcentrationExceeded,
+    
+    #[msg("Investment amount exceeds limit")]
+    InvestmentAmountExceedsLimit,
     
     #[msg("Insufficient portfolio diversification")]
     InsufficientDiversification,

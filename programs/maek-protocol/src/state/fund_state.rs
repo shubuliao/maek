@@ -1,13 +1,15 @@
 use anchor_lang::prelude::*;
 
 #[account]
-#[derive(Default)]
 pub struct FundState {
     /// Administrative authority (multisig)
     pub admin_authority: Pubkey,
     
     /// Fund token mint address
     pub fund_token_mint: Pubkey,
+    
+    /// USDC mint address
+    pub usdc_mint: Pubkey,
     
     /// USDC vault for deposits/withdrawals
     pub usdc_vault: Pubkey,
@@ -50,36 +52,43 @@ pub struct FundState {
     /// Total yield distributed to date (8 decimals)
     pub total_yield_distributed: u64,
     
-    /// Daily yield tracking for APY calculation
-    pub daily_yield_history: [u64; 365], // Last 365 days of yield
-    
-    /// Current day index in yield history array
-    pub yield_history_index: u16,
-    
     /// Total number of unique depositors
     pub total_depositors: u32,
     
-    /// Asset allocation tracking
-    pub treasury_bill_allocation: u32,    // Basis points (e.g., 5000 = 50%)
-    pub corporate_bond_allocation: u32,   // Basis points
-    pub other_asset_allocation: u32,      // Basis points
-    
-    /// Portfolio metrics
-    pub weighted_avg_maturity: u16,      // Days
-    pub weighted_avg_credit_rating: u8,  // 1=AAA, 2=AA+, etc.
-    pub total_assets_count: u32,         // Number of individual assets
-    
-    /// Reserved space for future upgrades
-    pub reserved: [u8; 128],
-    
     /// Account bump
     pub bump: u8,
+}
+
+impl Default for FundState {
+    fn default() -> Self {
+        Self {
+            admin_authority: Pubkey::default(),
+            fund_token_mint: Pubkey::default(),
+            usdc_mint: Pubkey::default(),
+            usdc_vault: Pubkey::default(),
+            treasury_vault: Pubkey::default(),
+            total_assets: 0,
+            total_shares: 0,
+            nav_per_share: 100_000_000, // $1.00 initial NAV
+            last_nav_update: 0,
+            cash_reserves: 0,
+            fixed_income_value: 0,
+            management_fee_bps: 0,
+            target_liquidity_ratio: 25, // 25% default
+            is_paused: false,
+            inception_date: 0,
+            total_yield_distributed: 0,
+            total_depositors: 0,
+            bump: 0,
+        }
+    }
 }
 
 impl FundState {
     pub const LEN: usize = 8 + // discriminator
         32 + // admin_authority
         32 + // fund_token_mint
+        32 + // usdc_mint
         32 + // usdc_vault
         32 + // treasury_vault
         8 + // total_assets
@@ -93,15 +102,6 @@ impl FundState {
         1 + // is_paused
         8 + // inception_date
         8 + // total_yield_distributed
-        365 * 8 + // daily_yield_history
-        2 + // yield_history_index
         4 + // total_depositors
-        4 + // treasury_bill_allocation
-        4 + // corporate_bond_allocation
-        4 + // other_asset_allocation
-        2 + // weighted_avg_maturity
-        1 + // weighted_avg_credit_rating
-        4 + // total_assets_count
-        128 + // reserved
         1; // bump
 } 

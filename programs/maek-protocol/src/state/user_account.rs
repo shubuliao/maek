@@ -1,7 +1,6 @@
 use anchor_lang::prelude::*;
 
 #[account]
-#[derive(Default)]
 pub struct UserFundAccount {
     /// Owner of this fund account
     pub owner: Pubkey,
@@ -46,11 +45,30 @@ pub struct UserFundAccount {
     /// Last NAV when user deposited (for performance tracking)
     pub last_deposit_nav: u64,
     
-    /// Reserved space for future features
-    pub reserved: [u8; 64],
-    
     /// Account bump
     pub bump: u8,
+}
+
+impl Default for UserFundAccount {
+    fn default() -> Self {
+        Self {
+            owner: Pubkey::default(),
+            fund_tokens: 0,
+            total_deposited: 0,
+            total_withdrawn: 0,
+            last_deposit_time: 0,
+            last_withdrawal_time: 0,
+            auto_compound: true, // Default to auto-compound
+            pending_yield: 0,
+            total_yield_earned: 0,
+            created_at: 0,
+            deposit_count: 0,
+            withdrawal_count: 0,
+            avg_cost_basis: 0,
+            last_deposit_nav: 0,
+            bump: 0,
+        }
+    }
 }
 
 impl UserFundAccount {
@@ -69,6 +87,5 @@ impl UserFundAccount {
         4 + // withdrawal_count
         8 + // avg_cost_basis
         8 + // last_deposit_nav
-        64 + // reserved
         1; // bump
 } 
