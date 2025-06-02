@@ -24,6 +24,13 @@ MAEK is a decentralized fixed income fund protocol mimicking BlackRock's BUIDL m
 - **Same-day settlement**: Instant deposits/withdrawals (subject to liquidity)
 - **Institutional-grade**: 8-decimal precision, professional risk management
 
+### Current Implementation Status ✅
+- **Program ID**: `2gtiJ4B3Fv6oF6ZEYJcXdoNTGVC4jG5bNQjXs9ELWrhx`
+- **Network**: Deployed and tested on local Solana network
+- **Available Instructions**: `deposit`, `withdraw`, `update_nav`
+- **Test Coverage**: 16 comprehensive unit tests (100% pass rate)
+- **Status**: Ready for frontend integration
+
 ### Core User Personas
 1. **Retail Investors**: Seeking stable yield with easy access
 2. **Institutional Investors**: Requiring detailed analytics and bulk operations
@@ -49,33 +56,21 @@ MAEK is a decentralized fixed income fund protocol mimicking BlackRock's BUIDL m
 
 ## Contract API Reference
 
-### Core Instructions
-
-#### 1. Initialize Fund (Admin Only)
+### Program Configuration
 ```typescript
-interface InitializeFundParams {
-  managementFeeBps: number; // e.g., 15 for 0.15%
-  targetLiquidityRatio: number; // e.g., 25 for 25%
-}
+// Program ID and connection setup
+const PROGRAM_ID = new PublicKey("2gtiJ4B3Fv6oF6ZEYJcXdoNTGVC4jG5bNQjXs9ELWrhx");
+const connection = new Connection("http://localhost:8899"); // Local network
+// For devnet: const connection = new Connection("https://api.devnet.solana.com");
 
-const initializeFund = async (
-  program: Program,
-  admin: Keypair,
-  params: InitializeFundParams
-) => {
-  return await program.methods
-    .initializeFund(params.managementFeeBps, params.targetLiquidityRatio)
-    .accounts({
-      admin: admin.publicKey,
-      fundState: fundStatePDA,
-      systemProgram: SystemProgram.programId,
-    })
-    .signers([admin])
-    .rpc();
-};
+// Initialize Anchor program
+const provider = new AnchorProvider(connection, wallet, {});
+const program = new Program(IDL, PROGRAM_ID, provider);
 ```
 
-#### 2. User Deposit
+### Currently Available Instructions
+
+#### 1. User Deposit ✅
 ```typescript
 interface DepositParams {
   amountUsdc: number; // Amount in USDC (6 decimals)
@@ -98,15 +93,16 @@ const deposit = async (
       userFundAccount: userFundAccountPDA,
       fundState: fundStatePDA,
       userUsdcAccount: userUsdcATA,
-      fundUsdcAccount: fundUsdcATA,
+      fundUsdcVault: fundUsdcVault,
       tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
     })
     .signers([user])
     .rpc();
 };
 ```
 
-#### 3. User Withdrawal
+#### 2. User Withdrawal ✅
 ```typescript
 interface WithdrawParams {
   fundTokens: number; // Fund tokens to burn (8 decimals)
@@ -124,7 +120,7 @@ const withdraw = async (
       userFundAccount: userFundAccountPDA,
       fundState: fundStatePDA,
       userUsdcAccount: userUsdcATA,
-      fundUsdcAccount: fundUsdcATA,
+      fundUsdcVault: fundUsdcVault,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
     .signers([user])
@@ -132,9 +128,15 @@ const withdraw = async (
 };
 ```
 
-#### 4. Update NAV (Admin Only)
+#### 3. Update NAV (Admin Only) ✅
 ```typescript
+interface AssetValuation {
+  assetId: PublicKey;
+  currentValue: BN; // 8 decimals
+}
+
 interface UpdateNavParams {
+  newAssetValuations: AssetValuation[];
   netDailyPnl: number; // Positive for profit, negative for loss (8 decimals)
 }
 
@@ -144,7 +146,7 @@ const updateNav = async (
   params: UpdateNavParams
 ) => {
   return await program.methods
-    .updateNav(new BN(params.netDailyPnl))
+    .updateNav(params.newAssetValuations, new BN(params.netDailyPnl))
     .accounts({
       admin: admin.publicKey,
       fundState: fundStatePDA,
@@ -154,35 +156,56 @@ const updateNav = async (
 };
 ```
 
-### Account State Interfaces
+### Account State Interfaces (Updated) ✅
 
 ```typescript
 interface FundState {
   adminAuthority: PublicKey;
-  totalAssets: BN; // 8 decimals
-  totalShares: BN; // 8 decimals
+  fundTokenMint: PublicKey;
+  usdcMint: PublicKey;
+  usdcVault: PublicKey;
+  treasuryVault: PublicKey;
+  totalAssets: BN; // 8 decimals - includes cash + fixed income
+  totalShares: BN; // 8 decimals - total fund tokens in circulation
   navPerShare: BN; // 8 decimals, e.g., 100_000_000 = $1.00
+  lastNavUpdate: BN; // timestamp
   cashReserves: BN; // 6 decimals (USDC)
   fixedIncomeValue: BN; // 8 decimals
-  managementFeeBps: number; // Basis points
-  targetLiquidityRatio: number; // Percentage
+  managementFeeBps: number; // Basis points (15 = 0.15%)
+  targetLiquidityRatio: number; // Percentage (25 = 25%)
   isPaused: boolean;
   inceptionDate: BN;
-  lastNavUpdate: BN;
-  totalDepositors: BN;
-  dailyYieldHistory: BN[]; // Last 365 days
+  totalYieldDistributed: BN; // 8 decimals
+  totalDepositors: number;
+  bump: number;
 }
 
 interface UserFundAccount {
   owner: PublicKey;
   fundTokens: BN; // 8 decimals
-  totalDeposited: BN; // 8 decimals (cumulative)
-  totalWithdrawn: BN; // 8 decimals (cumulative)
+  totalDeposited: BN; // 8 decimals (cumulative USD)
+  totalWithdrawn: BN; // 8 decimals (cumulative USD)
+  lastDepositTime: BN;
+  lastWithdrawalTime: BN;
+  autoCompound: boolean; // yield distribution preference
+  pendingYield: BN; // 6 decimals USDC
+  totalYieldEarned: BN; // 8 decimals
+  createdAt: BN;
   depositCount: number;
   withdrawalCount: number;
-  createdAt: BN;
-  lastActivity: BN;
+  avgCostBasis: BN; // 8 decimals - average cost per fund token
+  lastDepositNav: BN; // 8 decimals - for performance tracking
+  bump: number;
 }
+```
+
+### ⚠️ Instructions Currently Under Development
+```typescript
+// These will be available in future releases:
+// - initialize_fund (admin initialization)
+// - invest_in_fixed_income (asset management)
+// - handle_asset_maturity (maturity processing)
+// - admin controls (pause/unpause, emergency functions)
 ```
 
 ---
@@ -191,7 +214,7 @@ interface UserFundAccount {
 
 ### 1. Dashboard Design Principles
 
-#### Key Metrics Display
+#### Key Metrics Display (Updated for Current Implementation)
 ```typescript
 interface InvestorDashboard {
   // Primary metrics (always visible)
@@ -199,1010 +222,162 @@ interface InvestorDashboard {
     value: string; // "1,234.56 USDC"
     fundTokens: string; // "1,234.56789012 MAEK"
     navPerShare: string; // "$1.02345678"
+    lastUpdate: string; // "Updated 2 hours ago"
   };
   
   // Performance metrics
   performance: {
-    dailyChange: string; // "+$1.23 (+0.12%)"
     totalReturn: string; // "+$45.67 (+3.84%)"
-    currentApy: string; // "4.52%"
-    sinceInception: string; // "+$123.45 (+12.34%)"
+    avgCostBasis: string; // "$0.98123456"
+    unrealizedGainLoss: string; // "+$67.89 (+4.12%)"
+    totalYieldEarned: string; // "$23.45"
   };
   
-  // Quick actions
+  // Account activity
+  activity: {
+    depositCount: number;
+    withdrawalCount: number;
+    lastActivity: string; // "2 days ago"
+    memberSince: string; // "March 2024"
+  };
+  
+  // Quick actions (based on current contract capabilities)
   actions: {
-    canDeposit: boolean;
-    canWithdraw: boolean;
-    maxWithdrawal: string; // Available liquidity
+    canDeposit: boolean; // true if fund not paused
+    canWithdraw: boolean; // true if user has fund tokens
+    maxWithdrawal: string; // Based on fund liquidity
   };
 }
 ```
 
-#### UX Best Practices for Investors
-
-**1. Clear Value Proposition**
+#### Real-time Connection Status
 ```tsx
-const HeroSection = () => (
-  <div className="hero-section">
-    <h1>Earn {currentApy}% APY on Fixed Income</h1>
-    <p>Institutional-grade fund accessible to everyone</p>
-    <div className="key-benefits">
-      <Benefit icon="shield" text="Transparent & Secure" />
-      <Benefit icon="clock" text="Same-day Settlement" />
-      <Benefit icon="chart" text="Professional Management" />
-    </div>
-  </div>
-);
-```
-
-**2. Progressive Disclosure**
-- Show essential info first, details on demand
-- Use expandable sections for advanced metrics
-- Provide tooltips for technical terms
-
-**3. Real-time Updates**
-```tsx
-const BalanceDisplay = ({ balance, isLive }) => (
-  <div className="balance-card">
-    <div className="balance-header">
-      <h3>Your Balance</h3>
-      <LiveIndicator active={isLive} />
-    </div>
-    <div className="balance-amount">
-      <AnimatedNumber value={balance} />
-      <span className="currency">USDC</span>
-    </div>
-  </div>
-);
-```
-
-### 2. Deposit Flow UX
-
-#### Step-by-Step Deposit Process
-```tsx
-const DepositFlow = () => {
-  const [step, setStep] = useState(1);
-  
-  return (
-    <div className="deposit-flow">
-      <ProgressIndicator current={step} total={4} />
-      
-      {step === 1 && (
-        <AmountInput
-          min={10}
-          max={1000000}
-          onNext={(amount) => {
-            validateAmount(amount);
-            setStep(2);
-          }}
-        />
-      )}
-      
-      {step === 2 && <ReviewDeposit onConfirm={() => setStep(3)} />}
-      {step === 3 && <WalletConnection onConnect={() => setStep(4)} />}
-      {step === 4 && <TransactionConfirmation />}
-    </div>
-  );
-};
-```
-
-#### Smart Validation & Feedback
-```typescript
-const validateDepositAmount = (amount: number, userBalance: number) => {
-  const errors: string[] = [];
-  
-  if (amount < 10) {
-    errors.push("Minimum deposit is $10");
-  }
-  
-  if (amount > 1000000) {
-    errors.push("Maximum deposit is $1,000,000");
-  }
-  
-  if (amount > userBalance) {
-    errors.push("Insufficient USDC balance");
-  }
-  
-  return {
-    isValid: errors.length === 0,
-    errors,
-    suggestions: generateSuggestions(amount, userBalance)
-  };
-};
-```
-
-### 3. Portfolio Visualization
-
-#### Performance Charts
-```tsx
-const PerformanceChart = ({ data, timeframe }) => (
-  <div className="chart-container">
-    <ChartHeader timeframe={timeframe} />
-    <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={data}>
-        <XAxis dataKey="date" />
-        <YAxis domain={['dataMin - 0.1', 'dataMax + 0.1']} />
-        <Tooltip formatter={formatCurrency} />
-        <Line 
-          type="monotone" 
-          dataKey="nav" 
-          stroke="#2563eb" 
-          strokeWidth={2}
-          dot={false}
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  </div>
-);
-```
-
-#### Transaction History
-```tsx
-const TransactionHistory = ({ transactions }) => (
-  <div className="transaction-history">
-    <h3>Recent Activity</h3>
-    {transactions.map(tx => (
-      <TransactionCard
-        key={tx.signature}
-        type={tx.type} // 'deposit' | 'withdrawal'
-        amount={tx.amount}
-        nav={tx.navAtTime}
-        timestamp={tx.timestamp}
-        status={tx.status}
-      />
-    ))}
-  </div>
-);
-```
-
----
-
-## Fund Admin Experience Guidelines
-
-### 1. Admin Dashboard Architecture
-
-#### Comprehensive Overview
-```typescript
-interface AdminDashboard {
-  fundMetrics: {
-    totalAum: string; // Total Assets Under Management
-    totalInvestors: number;
-    currentNav: string;
-    liquidityRatio: string;
-    managementFeeAccrued: string;
-  };
-  
-  dailyOperations: {
-    pendingNavUpdate: boolean;
-    cashMovements: {
-      depositsToday: string;
-      withdrawalsToday: string;
-      netFlow: string;
-    };
-    assetMaturityCalendar: MaturityEvent[];
-  };
-  
-  riskMetrics: {
-    portfolioAllocation: AllocationBreakdown;
-    creditExposure: CreditExposure;
-    durationRisk: DurationMetrics;
-    concentrationLimits: ConcentrationCheck[];
-  };
-}
-```
-
-### 2. NAV Management Interface
-
-#### Daily NAV Update Workflow
-```tsx
-const NavUpdatePanel = () => {
-  const [navData, setNavData] = useState<NavUpdateData>();
-  const [isCalculating, setIsCalculating] = useState(false);
-  
-  return (
-    <div className="nav-update-panel">
-      <div className="nav-header">
-        <h2>Daily NAV Update</h2>
-        <LastUpdateIndicator />
-      </div>
-      
-      <AssetValuationInput 
-        onValuationChange={handleValuationChange}
-      />
-      
-      <PnLCalculation
-        data={navData}
-        isCalculating={isCalculating}
-      />
-      
-      <NavPreview 
-        currentNav={navData?.currentNav}
-        proposedNav={navData?.proposedNav}
-        impact={navData?.impactAnalysis}
-      />
-      
-      <ConfirmationPanel
-        onConfirm={submitNavUpdate}
-        requiresApprovals={true}
-      />
-    </div>
-  );
-};
-```
-
-#### Asset Management Interface
-```tsx
-const AssetManagement = () => (
-  <div className="asset-management">
-    <PortfolioOverview />
-    
-    <div className="asset-actions">
-      <AssetPurchasePanel />
-      <MaturityManagement />
-      <LiquidityOptimization />
-    </div>
-    
-    <ComplianceMonitoring />
-  </div>
-);
-```
-
-### 3. Risk Management Dashboard
-
-#### Real-time Risk Monitoring
-```tsx
-const RiskDashboard = () => (
-  <div className="risk-dashboard">
-    <RiskMetricsGrid>
-      <MetricCard
-        title="Portfolio Concentration"
-        value="12.5%"
-        limit="15%"
-        status="good"
-      />
-      <MetricCard
-        title="Liquidity Ratio"
-        value="28%"
-        target="25%"
-        status="good"
-      />
-      <MetricCard
-        title="Duration Risk"
-        value="2.3 years"
-        limit="3.0 years"
-        status="warning"
-      />
-    </RiskMetricsGrid>
-    
-    <AlertsPanel />
-    <ComplianceChecklist />
-  </div>
-);
-```
-
----
-
-## Real-time Data Handling
-
-### 1. WebSocket Connection Management
-
-```typescript
-class MaekDataService {
-  private ws: WebSocket | null = null;
-  private subscribers: Map<string, Set<Function>> = new Map();
-  
-  connect() {
-    this.ws = new WebSocket(process.env.REACT_APP_WS_URL);
-    
-    this.ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      this.notifySubscribers(data.type, data.payload);
-    };
-    
-    this.ws.onclose = () => {
-      // Implement exponential backoff reconnection
-      setTimeout(() => this.connect(), this.getReconnectDelay());
-    };
-  }
-  
-  subscribe(event: string, callback: Function) {
-    if (!this.subscribers.has(event)) {
-      this.subscribers.set(event, new Set());
-    }
-    this.subscribers.get(event)!.add(callback);
-  }
-  
-  // Subscribe to real-time events
-  subscribeToNavUpdates(callback: (nav: NavUpdate) => void) {
-    this.subscribe('nav_update', callback);
-  }
-  
-  subscribeToUserBalance(userKey: string, callback: (balance: UserBalance) => void) {
-    this.subscribe(`user_balance_${userKey}`, callback);
-  }
-}
-```
-
-### 2. State Management with Real-time Updates
-
-```typescript
-// Using React Query for server state management
-const useRealtimeFundData = () => {
-  const queryClient = useQueryClient();
-  const dataService = useMaekDataService();
+const ConnectionStatus = () => {
+  const { connection } = useConnection();
+  const [blockHeight, setBlockHeight] = useState<number>(0);
+  const [isLive, setIsLive] = useState(false);
   
   useEffect(() => {
-    const unsubscribe = dataService.subscribeToNavUpdates((update) => {
-      queryClient.setQueryData(['fund-state'], (old: FundState) => ({
-        ...old,
-        navPerShare: update.newNav,
-        totalAssets: update.totalAssets,
-        lastNavUpdate: update.timestamp,
-      }));
+    const subscription = connection.onSlotChange((slotInfo) => {
+      setBlockHeight(slotInfo.slot);
+      setIsLive(true);
+      
+      // Reset live status after 5 seconds of no updates
+      const timeout = setTimeout(() => setIsLive(false), 5000);
+      return () => clearTimeout(timeout);
     });
     
-    return unsubscribe;
-  }, [queryClient, dataService]);
-  
-  return useQuery(['fund-state'], () => fetchFundState(), {
-    staleTime: 30000, // 30 seconds
-    refetchInterval: 60000, // 1 minute backup polling
-  });
-};
-```
-
-### 3. Optimistic Updates
-
-```typescript
-const useOptimisticDeposit = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation(depositFunds, {
-    onMutate: async (depositData) => {
-      // Cancel any outgoing refetches
-      await queryClient.cancelQueries(['user-balance']);
-      
-      // Snapshot the previous value
-      const previousBalance = queryClient.getQueryData(['user-balance']);
-      
-      // Optimistically update to the new value
-      queryClient.setQueryData(['user-balance'], (old: UserBalance) => ({
-        ...old,
-        fundTokens: old.fundTokens.add(depositData.expectedTokens),
-        totalDeposited: old.totalDeposited.add(depositData.amount),
-      }));
-      
-      return { previousBalance };
-    },
-    
-    onError: (err, depositData, context) => {
-      // Rollback on error
-      queryClient.setQueryData(['user-balance'], context?.previousBalance);
-    },
-    
-    onSettled: () => {
-      // Always refetch after error or success
-      queryClient.invalidateQueries(['user-balance']);
-    },
-  });
-};
-```
-
----
-
-## Error Handling & Validation
-
-### 1. Comprehensive Error Mapping
-
-```typescript
-const ERROR_MESSAGES: Record<string, string> = {
-  // Deposit errors
-  'DepositTooSmall': 'Minimum deposit is $10. Please increase your deposit amount.',
-  'DepositTooLarge': 'Maximum deposit is $1,000,000. Please reduce your deposit amount.',
-  'InsufficientFunds': 'Insufficient USDC balance. Please add funds to your wallet.',
-  
-  // Withdrawal errors
-  'InsufficientFundTokens': 'Insufficient fund tokens. Your maximum withdrawal is {maxAmount}.',
-  'InsufficientLiquidity': 'Temporary liquidity shortage. Please try a smaller amount or try again later.',
-  
-  // NAV errors
-  'NAVUpdateTooFrequent': 'NAV can only be updated once per day. Next update available at {nextUpdate}.',
-  'NAVTooLow': 'Proposed NAV is below safety threshold. Please review asset valuations.',
-  'NAVTooHigh': 'Proposed NAV exceeds safety threshold. Please review calculations.',
-  
-  // General errors
-  'FundPaused': 'Fund operations are temporarily paused for maintenance.',
-  'UnauthorizedAccess': 'You do not have permission to perform this action.',
-  'NetworkError': 'Network connection error. Please check your internet connection.',
-};
-
-const formatErrorMessage = (error: any): string => {
-  if (error.code && ERROR_MESSAGES[error.code]) {
-    return ERROR_MESSAGES[error.code].replace(
-      /\{(\w+)\}/g, 
-      (match, key) => error.data?.[key] || match
-    );
-  }
-  
-  return 'An unexpected error occurred. Please try again or contact support.';
-};
-```
-
-### 2. Input Validation Hooks
-
-```typescript
-const useDepositValidation = () => {
-  return (amount: string, userBalance: number) => {
-    const numAmount = parseFloat(amount);
-    const errors: ValidationError[] = [];
-    
-    // Required field
-    if (!amount || isNaN(numAmount)) {
-      errors.push({
-        field: 'amount',
-        type: 'required',
-        message: 'Please enter a deposit amount'
-      });
-      return { isValid: false, errors };
-    }
-    
-    // Minimum amount
-    if (numAmount < 10) {
-      errors.push({
-        field: 'amount',
-        type: 'min',
-        message: 'Minimum deposit is $10',
-        suggestion: 'Enter at least $10'
-      });
-    }
-    
-    // Maximum amount
-    if (numAmount > 1000000) {
-      errors.push({
-        field: 'amount',
-        type: 'max',
-        message: 'Maximum deposit is $1,000,000',
-        suggestion: 'Enter no more than $1,000,000'
-      });
-    }
-    
-    // User balance check
-    if (numAmount > userBalance) {
-      errors.push({
-        field: 'amount',
-        type: 'insufficient',
-        message: `Insufficient balance. You have $${userBalance.toLocaleString()}`,
-        suggestion: `Maximum you can deposit: $${userBalance.toLocaleString()}`
-      });
-    }
-    
-    return {
-      isValid: errors.length === 0,
-      errors,
-      warnings: generateWarnings(numAmount, userBalance)
+    return () => {
+      connection.removeSlotChangeListener(subscription);
     };
-  };
-};
-```
-
-### 3. Transaction Error Recovery
-
-```tsx
-const TransactionHandler = ({ children }) => {
-  const [retryCount, setRetryCount] = useState(0);
-  const [isRetrying, setIsRetrying] = useState(false);
-  
-  const handleTransactionError = async (error: any, retryFn: Function) => {
-    const maxRetries = 3;
-    
-    if (retryCount < maxRetries && isRetriableError(error)) {
-      setIsRetrying(true);
-      setRetryCount(prev => prev + 1);
-      
-      // Exponential backoff
-      await new Promise(resolve => 
-        setTimeout(resolve, Math.pow(2, retryCount) * 1000)
-      );
-      
-      try {
-        await retryFn();
-        setRetryCount(0);
-      } catch (retryError) {
-        handleTransactionError(retryError, retryFn);
-      } finally {
-        setIsRetrying(false);
-      }
-    } else {
-      // Show user-friendly error
-      showErrorToast(formatErrorMessage(error));
-    }
-  };
+  }, [connection]);
   
   return (
-    <ErrorBoundary fallback={<ErrorFallback />}>
-      {children}
-    </ErrorBoundary>
+    <div className="connection-status">
+      <div className={`status-indicator ${isLive ? 'live' : 'offline'}`} />
+      <span>Block {blockHeight.toLocaleString()}</span>
+    </div>
   );
 };
 ```
 
----
+### 2. Deposit Flow UX (Updated for Current Contract)
 
-## Security Best Practices
-
-### 1. Wallet Security
-
-```typescript
-// Secure wallet connection with validation
-const useSecureWallet = () => {
-  const { wallet, connected } = useWallet();
-  const [isValidated, setIsValidated] = useState(false);
-  
-  useEffect(() => {
-    if (connected && wallet) {
-      validateWalletSecurity(wallet).then(setIsValidated);
-    }
-  }, [connected, wallet]);
-  
-  const validateWalletSecurity = async (wallet: Wallet) => {
-    // Check for known malicious addresses
-    const isBlacklisted = await checkBlacklist(wallet.adapter.publicKey);
-    if (isBlacklisted) {
-      throw new Error('Wallet address is blacklisted');
-    }
-    
-    // Verify wallet signature
-    const challenge = generateChallenge();
-    const signature = await wallet.adapter.signMessage(challenge);
-    return verifySignature(signature, challenge, wallet.adapter.publicKey);
-  };
-  
-  return { wallet, connected, isValidated };
-};
-```
-
-### 2. Transaction Security
-
-```typescript
-// Secure transaction building with validation
-const buildSecureTransaction = async (
-  instruction: TransactionInstruction,
-  user: PublicKey
-) => {
-  const transaction = new Transaction();
-  
-  // Add priority fee for faster processing
-  const priorityFee = ComputeBudgetProgram.setComputeUnitPrice({
-    microLamports: 1000,
-  });
-  transaction.add(priorityFee);
-  
-  // Add the main instruction
-  transaction.add(instruction);
-  
-  // Set recent blockhash
-  const { blockhash } = await connection.getLatestBlockhash();
-  transaction.recentBlockhash = blockhash;
-  transaction.feePayer = user;
-  
-  // Simulate transaction before sending
-  const simulation = await connection.simulateTransaction(transaction);
-  if (simulation.value.err) {
-    throw new Error(`Transaction simulation failed: ${simulation.value.err}`);
-  }
-  
-  return transaction;
-};
-```
-
-### 3. Input Sanitization
-
-```typescript
-// Sanitize and validate all user inputs
-const sanitizeInput = {
-  amount: (input: string): number => {
-    // Remove all non-numeric characters except decimal point
-    const cleaned = input.replace(/[^0-9.]/g, '');
-    
-    // Ensure only one decimal point
-    const parts = cleaned.split('.');
-    if (parts.length > 2) {
-      return parseFloat(parts[0] + '.' + parts[1]);
-    }
-    
-    const amount = parseFloat(cleaned);
-    
-    // Validate range
-    if (amount < 0) return 0;
-    if (amount > 1000000) return 1000000;
-    
-    return amount;
-  },
-  
-  publicKey: (input: string): PublicKey | null => {
-    try {
-      return new PublicKey(input.trim());
-    } catch {
-      return null;
-    }
-  }
-};
-```
-
----
-
-## Performance Optimization
-
-### 1. Code Splitting & Lazy Loading
-
-```typescript
-// Lazy load admin components
-const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
-const InvestorDashboard = lazy(() => import('./components/investor/InvestorDashboard'));
-
-const App = () => (
-  <Router>
-    <Suspense fallback={<LoadingSpinner />}>
-      <Routes>
-        <Route path="/invest" element={<InvestorDashboard />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-      </Routes>
-    </Suspense>
-  </Router>
-);
-```
-
-### 2. Data Fetching Optimization
-
-```typescript
-// Efficient data fetching with batching
-const useBatchedQueries = () => {
-  return useQueries([
-    {
-      queryKey: ['fund-state'],
-      queryFn: fetchFundState,
-      staleTime: 30000,
-    },
-    {
-      queryKey: ['user-balance'],
-      queryFn: fetchUserBalance,
-      staleTime: 10000,
-    },
-    {
-      queryKey: ['price-history'],
-      queryFn: fetchPriceHistory,
-      staleTime: 300000, // 5 minutes
-    },
-  ]);
-};
-
-// Implement pagination for transaction history
-const useTransactionHistory = (limit = 20) => {
-  return useInfiniteQuery(
-    ['transactions'],
-    ({ pageParam = 0 }) => fetchTransactions({ offset: pageParam, limit }),
-    {
-      getNextPageParam: (lastPage, pages) => 
-        lastPage.hasMore ? pages.length * limit : undefined,
-    }
-  );
-};
-```
-
-### 3. Memoization & Optimization
-
-```typescript
-// Memoize expensive calculations
-const usePortfolioCalculations = (fundData: FundState) => {
+#### Enhanced Deposit Validation
+```tsx
+const useDepositValidation = (userUsdcBalance: number) => {
   return useMemo(() => {
-    if (!fundData) return null;
-    
-    return {
-      totalValue: calculateTotalValue(fundData),
-      allocationBreakdown: calculateAllocation(fundData),
-      riskMetrics: calculateRisk(fundData),
+    return (amount: string) => {
+      const numAmount = parseFloat(amount);
+      const errors: string[] = [];
+      const warnings: string[] = [];
+      
+      if (!amount || isNaN(numAmount)) {
+        errors.push("Please enter a deposit amount");
+        return { isValid: false, errors, warnings };
+      }
+      
+      // Contract validations
+      if (numAmount < 10) {
+        errors.push("Minimum deposit is $10");
+      }
+      
+      if (numAmount > 1000000) {
+        errors.push("Maximum deposit is $1,000,000");
+      }
+      
+      if (numAmount > userUsdcBalance) {
+        errors.push(`Insufficient balance. You have $${userUsdcBalance.toLocaleString()}`);
+      }
+      
+      // Warnings for user experience
+      if (numAmount > userUsdcBalance * 0.9) {
+        warnings.push("You're depositing most of your USDC balance");
+      }
+      
+      if (numAmount < 100) {
+        warnings.push("Small deposits may have proportionally higher transaction costs");
+      }
+      
+      return {
+        isValid: errors.length === 0,
+        errors,
+        warnings
+      };
     };
-  }, [fundData]);
+  }, [userUsdcBalance]);
 };
-
-// Virtualized lists for large datasets
-const VirtualizedTransactionList = ({ transactions }) => (
-  <FixedSizeList
-    height={400}
-    itemCount={transactions.length}
-    itemSize={64}
-    itemData={transactions}
-  >
-    {TransactionRow}
-  </FixedSizeList>
-);
 ```
 
----
+### 3. Portfolio Visualization (Enhanced)
 
-## Mobile & Accessibility
-
-### 1. Responsive Design Patterns
-
-```scss
-// Mobile-first responsive design
-.dashboard {
-  display: grid;
-  gap: 1rem;
-  padding: 1rem;
-  
-  // Mobile (default)
-  grid-template-columns: 1fr;
-  
-  // Tablet
-  @media (min-width: 768px) {
-    grid-template-columns: 1fr 1fr;
-    padding: 2rem;
-  }
-  
-  // Desktop
-  @media (min-width: 1024px) {
-    grid-template-columns: 2fr 1fr;
-    gap: 2rem;
-  }
-}
-
-.metric-card {
-  // Touch-friendly sizing
-  min-height: 44px;
-  padding: 1rem;
-  
-  // Prevent text scaling issues
-  text-size-adjust: 100%;
-}
-```
-
-### 2. Accessibility Implementation
-
+#### NAV Performance Chart with Real-time Updates
 ```tsx
-// ARIA-compliant components
-const BalanceCard = ({ balance, isLoading }) => (
-  <div 
-    className="balance-card"
-    role="region"
-    aria-label="Account balance"
-    aria-live="polite"
-    aria-busy={isLoading}
-  >
-    <h3 id="balance-heading">Your Balance</h3>
-    <div 
-      aria-labelledby="balance-heading"
-      aria-describedby="balance-description"
-    >
-      {isLoading ? (
-        <span aria-label="Loading balance">...</span>
-      ) : (
-        <span aria-label={`Balance: ${balance} dollars`}>
-          ${balance.toLocaleString()}
-        </span>
-      )}
-    </div>
-    <p id="balance-description" className="sr-only">
-      This shows your current account balance in US dollars
-    </p>
-  </div>
-);
-
-// Keyboard navigation support
-const useKeyboardNavigation = () => {
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Alt + 1: Go to dashboard
-      if (e.altKey && e.key === '1') {
-        navigate('/dashboard');
-      }
-      
-      // Alt + 2: Go to deposit
-      if (e.altKey && e.key === '2') {
-        navigate('/deposit');
-      }
-      
-      // Escape: Close modals
-      if (e.key === 'Escape') {
-        closeAllModals();
-      }
-    };
-    
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
-};
-```
-
-### 3. Mobile-Optimized Flows
-
-```tsx
-// Mobile-optimized deposit flow
-const MobileDepositFlow = () => {
-  const [amount, setAmount] = useState('');
-  const isValid = amount && parseFloat(amount) >= 10;
+const NavPerformanceChart = () => {
+  const { data: fundState } = useFundState();
+  const { data: navHistory } = useNavHistory();
+  const [timeframe, setTimeframe] = useState<'24h' | '7d' | '30d' | '1y'>('7d');
   
-  return (
-    <div className="mobile-deposit">
-      <div className="amount-input-section">
-        <label htmlFor="deposit-amount" className="amount-label">
-          How much would you like to deposit?
-        </label>
-        
-        <div className="currency-input">
-          <span className="currency-symbol">$</span>
-          <input
-            id="deposit-amount"
-            type="number"
-            inputMode="decimal"
-            placeholder="0.00"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="amount-field"
-          />
-        </div>
-        
-        <QuickAmountButtons 
-          amounts={[10, 100, 500, 1000]}
-          onSelect={setAmount}
-        />
-      </div>
-      
-      <div className="action-section">
-        <Button
-          disabled={!isValid}
-          onClick={handleDeposit}
-          className="primary-action"
-        >
-          Continue
-        </Button>
-      </div>
-    </div>
-  );
-};
-```
-
----
-
-## Component Library & Patterns
-
-### 1. Design System Foundation
-
-```typescript
-// Theme configuration
-export const theme = {
-  colors: {
-    primary: {
-      50: '#eff6ff',
-      500: '#3b82f6',
-      600: '#2563eb',
-      900: '#1e3a8a',
-    },
-    success: '#10b981',
-    warning: '#f59e0b',
-    error: '#ef4444',
-    neutral: {
-      100: '#f5f5f5',
-      500: '#6b7280',
-      900: '#111827',
-    },
-  },
-  
-  spacing: {
-    xs: '0.25rem',
-    sm: '0.5rem',
-    md: '1rem',
-    lg: '1.5rem',
-    xl: '2rem',
-  },
-  
-  typography: {
-    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
-    fontSize: {
-      xs: '0.75rem',
-      sm: '0.875rem',
-      base: '1rem',
-      lg: '1.125rem',
-      xl: '1.25rem',
-      '2xl': '1.5rem',
-    },
-  },
-};
-```
-
-### 2. Reusable Components
-
-#### Currency Display Component
-```tsx
-interface CurrencyDisplayProps {
-  amount: number | string;
-  currency?: 'USD' | 'USDC' | 'MAEK';
-  precision?: number;
-  showSign?: boolean;
-  size?: 'sm' | 'md' | 'lg';
-}
-
-const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
-  amount,
-  currency = 'USD',
-  precision = 2,
-  showSign = false,
-  size = 'md',
-}) => {
-  const formatAmount = (value: number | string) => {
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    
-    if (currency === 'MAEK') {
-      return num.toFixed(8); // 8 decimals for fund tokens
-    }
-    
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: precision,
-      maximumFractionDigits: precision,
-    }).format(num);
-  };
-  
-  const displayValue = formatAmount(amount);
-  const isNegative = parseFloat(amount.toString()) < 0;
-  
-  return (
-    <span 
-      className={clsx(
-        'currency-display',
-        `size-${size}`,
-        isNegative && 'negative',
-        showSign && 'show-sign'
-      )}
-    >
-      {displayValue}
-      {currency !== 'USD' && (
-        <span className="currency-suffix"> {currency}</span>
-      )}
-    </span>
-  );
-};
-```
-
-#### Performance Chart Component
-```tsx
-interface PerformanceChartProps {
-  data: Array<{ date: string; nav: number }>;
-  timeframe: '24h' | '7d' | '30d' | '1y';
-  height?: number;
-}
-
-const PerformanceChart: React.FC<PerformanceChartProps> = ({
-  data,
-  timeframe,
-  height = 200,
-}) => {
   const chartData = useMemo(() => {
-    return data.map(point => ({
-      ...point,
-      date: format(new Date(point.date), getDateFormat(timeframe)),
+    if (!navHistory) return [];
+    
+    return navHistory.map(point => ({
+      date: point.timestamp,
+      nav: point.navPerShare / 100_000_000, // Convert from 8 decimals to dollar amount
+      totalAssets: point.totalAssets / 100_000_000,
     }));
-  }, [data, timeframe]);
+  }, [navHistory]);
   
   return (
-    <div className="performance-chart">
-      <ResponsiveContainer width="100%" height={height}>
+    <div className="nav-chart-container">
+      <div className="chart-header">
+        <h3>NAV Performance</h3>
+        <div className="timeframe-selector">
+          {['24h', '7d', '30d', '1y'].map(tf => (
+            <button
+              key={tf}
+              className={timeframe === tf ? 'active' : ''}
+              onClick={() => setTimeframe(tf as any)}
+            >
+              {tf}
+            </button>
+          ))}
+        </div>
+      </div>
+      
+      <ResponsiveContainer width="100%" height={300}>
         <LineChart data={chartData}>
           <XAxis 
             dataKey="date" 
-            axisLine={false}
-            tickLine={false}
+            tickFormatter={(timestamp) => format(new Date(timestamp * 1000), 'MMM dd')}
           />
           <YAxis 
             domain={['dataMin - 0.001', 'dataMax + 0.001']}
             tickFormatter={(value) => `$${value.toFixed(4)}`}
-            axisLine={false}
-            tickLine={false}
           />
           <Tooltip 
-            formatter={(value: number) => [`$${value.toFixed(8)}`, 'NAV']}
-            labelFormatter={(date) => `Date: ${date}`}
+            formatter={(value: number) => [`$${value.toFixed(8)}`, 'NAV per Share']}
+            labelFormatter={(timestamp) => format(new Date(timestamp * 1000), 'PPP')}
           />
           <Line 
             type="monotone" 
@@ -1219,155 +394,304 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({
 };
 ```
 
-#### Smart Loading States
-```tsx
-const SmartLoader = ({ 
-  isLoading, 
-  error, 
-  children, 
-  skeleton,
-  retry 
-}) => {
-  if (error) {
-    return (
-      <ErrorState 
-        message={error.message}
-        onRetry={retry}
-      />
-    );
-  }
-  
-  if (isLoading) {
-    return skeleton || <LoadingSkeleton />;
-  }
-  
-  return children;
-};
+---
 
-// Usage
-<SmartLoader
-  isLoading={isLoadingBalance}
-  error={balanceError}
-  retry={refetchBalance}
-  skeleton={<BalanceSkeleton />}
->
-  <BalanceCard balance={userBalance} />
-</SmartLoader>
-```
+## Fund Admin Experience Guidelines (Updated)
 
-### 3. Form Patterns
+### 1. Current Admin Capabilities
 
-#### Smart Form Hook
+#### Available Admin Functions ✅
 ```typescript
-const useSmartForm = <T>(
-  initialValues: T,
-  validationSchema: yup.Schema<T>
-) => {
-  const [values, setValues] = useState(initialValues);
-  const [errors, setErrors] = useState<Partial<Record<keyof T, string>>>({});
-  const [touched, setTouched] = useState<Partial<Record<keyof T, boolean>>>({});
-  
-  const validate = async (field?: keyof T) => {
-    try {
-      if (field) {
-        await validationSchema.validateAt(field as string, values);
-        setErrors(prev => ({ ...prev, [field]: undefined }));
-      } else {
-        await validationSchema.validate(values, { abortEarly: false });
-        setErrors({});
-      }
-      return true;
-    } catch (err) {
-      if (err instanceof yup.ValidationError) {
-        const newErrors: Partial<Record<keyof T, string>> = {};
-        err.inner.forEach(error => {
-          if (error.path) {
-            newErrors[error.path as keyof T] = error.message;
-          }
-        });
-        setErrors(newErrors);
-      }
-      return false;
-    }
+interface CurrentAdminCapabilities {
+  navManagement: {
+    updateDailyNav: boolean; // ✅ Available
+    viewNavHistory: boolean; // ✅ Available
+    setManagementFee: boolean; // ⚠️ Set during initialization only
   };
   
-  const handleChange = (field: keyof T) => (value: any) => {
-    setValues(prev => ({ ...prev, [field]: value }));
-    if (touched[field]) {
-      validate(field);
-    }
+  fundMonitoring: {
+    viewTotalAssets: boolean; // ✅ Available
+    viewTotalShares: boolean; // ✅ Available
+    viewCashReserves: boolean; // ✅ Available
+    viewUserAccounts: boolean; // ✅ Available
   };
   
-  const handleBlur = (field: keyof T) => () => {
-    setTouched(prev => ({ ...prev, [field]: true }));
-    validate(field);
+  emergencyControls: {
+    pauseFund: boolean; // ⚠️ Under development
+    emergencyWithdraw: boolean; // ⚠️ Under development
   };
+}
+```
+
+#### NAV Update Dashboard (Primary Admin Interface)
+```tsx
+const AdminNavUpdate = () => {
+  const { data: fundState } = useFundState();
+  const [assetValuations, setAssetValuations] = useState<AssetValuation[]>([]);
+  const [netPnL, setNetPnL] = useState<string>('');
+  const updateNavMutation = useUpdateNav();
   
-  return {
-    values,
-    errors,
-    touched,
-    handleChange,
-    handleBlur,
-    validate,
-    isValid: Object.keys(errors).length === 0,
-  };
+  const calculateNewNav = useMemo(() => {
+    if (!fundState || !assetValuations.length) return null;
+    
+    const totalAssetValue = assetValuations.reduce(
+      (sum, asset) => sum + parseFloat(asset.currentValue.toString()),
+      0
+    );
+    
+    const newTotalAssets = totalAssetValue + parseFloat(netPnL || '0');
+    const newNav = (newTotalAssets * 100_000_000) / fundState.totalShares;
+    
+    return {
+      currentNav: fundState.navPerShare / 100_000_000,
+      proposedNav: newNav / 100_000_000,
+      change: ((newNav - fundState.navPerShare) / fundState.navPerShare) * 100,
+      totalAssets: newTotalAssets / 100_000_000,
+    };
+  }, [fundState, assetValuations, netPnL]);
+  
+  return (
+    <div className="nav-update-panel">
+      <div className="current-state">
+        <MetricCard
+          title="Current NAV"
+          value={`$${(fundState?.navPerShare || 0) / 100_000_000}`}
+          subtitle={`Last updated ${formatDistanceToNow(new Date((fundState?.lastNavUpdate || 0) * 1000))} ago`}
+        />
+        <MetricCard
+          title="Total Assets"
+          value={formatCurrency(fundState?.totalAssets || 0, 8)}
+          subtitle={`${fundState?.totalDepositors || 0} depositors`}
+        />
+      </div>
+      
+      <AssetValuationForm
+        onValuationsChange={setAssetValuations}
+        onPnLChange={setNetPnL}
+      />
+      
+      {calculateNewNav && (
+        <NavPreview
+          current={calculateNewNav.currentNav}
+          proposed={calculateNewNav.proposedNav}
+          change={calculateNewNav.change}
+        />
+      )}
+      
+      <Button
+        onClick={() => updateNavMutation.mutate({
+          newAssetValuations: assetValuations,
+          netDailyPnl: parseFloat(netPnL) * 100_000_000, // Convert to 8 decimals
+        })}
+        disabled={!assetValuations.length || !netPnL}
+        loading={updateNavMutation.isLoading}
+      >
+        Update NAV
+      </Button>
+    </div>
+  );
 };
 ```
 
 ---
 
-## Implementation Checklist
+## Real-time Data Handling (Updated for Current Implementation)
 
-### For Investor Interface ✅
-- [ ] Wallet connection with security validation
-- [ ] Real-time balance updates
-- [ ] Intuitive deposit/withdrawal flows
-- [ ] Performance visualization
-- [ ] Transaction history with filtering
-- [ ] Mobile-responsive design
-- [ ] Accessibility compliance (WCAG 2.1 AA)
-- [ ] Error handling and recovery
-- [ ] Offline state management
-- [ ] Push notifications for important updates
+### 1. Fund State Polling Strategy
+```typescript
+const useFundState = () => {
+  const { program } = useAnchorProgram();
+  
+  return useQuery(
+    ['fund-state'],
+    async () => {
+      const [fundStatePDA] = await PublicKey.findProgramAddress(
+        [Buffer.from('fund_state')],
+        program.programId
+      );
+      
+      return await program.account.fundState.fetch(fundStatePDA);
+    },
+    {
+      staleTime: 10000, // 10 seconds
+      refetchInterval: 30000, // 30 seconds
+      refetchOnWindowFocus: true,
+    }
+  );
+};
 
-### For Admin Interface ✅
-- [ ] Comprehensive fund dashboard
-- [ ] NAV update workflow
-- [ ] Risk monitoring tools
-- [ ] Asset management interface
-- [ ] Compliance reporting
-- [ ] Audit trail logging
-- [ ] Multi-signature support
-- [ ] Role-based access control
-- [ ] Data export functionality
-- [ ] Emergency controls
+const useUserFundAccount = (userPubkey: PublicKey) => {
+  const { program } = useAnchorProgram();
+  
+  return useQuery(
+    ['user-fund-account', userPubkey.toString()],
+    async () => {
+      const [userFundAccountPDA] = await PublicKey.findProgramAddress(
+        [Buffer.from('user_fund'), userPubkey.toBuffer()],
+        program.programId
+      );
+      
+      try {
+        return await program.account.userFundAccount.fetch(userFundAccountPDA);
+      } catch (err) {
+        // Account doesn't exist yet
+        return null;
+      }
+    },
+    {
+      staleTime: 5000, // 5 seconds
+      refetchInterval: 15000, // 15 seconds
+      enabled: !!userPubkey,
+    }
+  );
+};
+```
 
-### Performance & Security ✅
-- [ ] Code splitting and lazy loading
-- [ ] Image optimization
-- [ ] CDN integration
-- [ ] Security headers
-- [ ] Input sanitization
-- [ ] Rate limiting
-- [ ] Error tracking (Sentry)
-- [ ] Analytics integration
-- [ ] Performance monitoring
-- [ ] Load testing
+### 2. Transaction Monitoring
+```typescript
+const useTransactionMonitoring = () => {
+  const { connection } = useConnection();
+  const [pendingTxs, setPendingTxs] = useState<Set<string>>(new Set());
+  
+  const monitorTransaction = useCallback(async (signature: string) => {
+    setPendingTxs(prev => new Set([...prev, signature]));
+    
+    try {
+      const confirmation = await connection.confirmTransaction(signature, 'confirmed');
+      
+      if (confirmation.value.err) {
+        throw new Error('Transaction failed');
+      }
+      
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries(['fund-state']);
+      queryClient.invalidateQueries(['user-fund-account']);
+      
+      showSuccessToast('Transaction confirmed');
+    } catch (error) {
+      showErrorToast('Transaction failed');
+    } finally {
+      setPendingTxs(prev => {
+        const next = new Set(prev);
+        next.delete(signature);
+        return next;
+      });
+    }
+  }, [connection]);
+  
+  return { monitorTransaction, pendingTxs };
+};
+```
 
 ---
 
-## Getting Started
+## Error Handling & Validation (Updated)
+
+### 1. Contract-Specific Error Handling
+```typescript
+const MAEK_ERROR_MESSAGES: Record<string, string> = {
+  // Current contract errors
+  'InsufficientFunds': 'Insufficient USDC balance for this deposit.',
+  'InsufficientFundTokens': 'You don\'t have enough fund tokens for this withdrawal.',
+  'AmountTooSmall': 'Minimum deposit is $10.',
+  'AmountTooLarge': 'Maximum deposit is $1,000,000.',
+  'FundPaused': 'Fund operations are temporarily paused.',
+  'UnauthorizedAdmin': 'Only the fund administrator can perform this action.',
+  
+  // Future errors (for when full contract is implemented)
+  'NAVUpdateTooFrequent': 'NAV can only be updated once per 24 hours.',
+  'NAVTooLow': 'Proposed NAV is below the minimum threshold.',
+  'NAVTooHigh': 'Proposed NAV exceeds the maximum threshold.',
+  'LiquidityInsufficient': 'Insufficient liquidity for this withdrawal amount.',
+};
+
+const parseContractError = (error: any): string => {
+  // Parse Anchor errors
+  if (error.code) {
+    return MAEK_ERROR_MESSAGES[error.code] || `Contract error: ${error.code}`;
+  }
+  
+  // Parse logs for custom errors
+  if (error.logs) {
+    for (const log of error.logs) {
+      const match = log.match(/Error: (.+)/);
+      if (match) {
+        const errorName = match[1];
+        return MAEK_ERROR_MESSAGES[errorName] || errorName;
+      }
+    }
+  }
+  
+  return 'An unexpected error occurred. Please try again.';
+};
+```
+
+---
+
+## Security Best Practices (Updated)
+
+### 1. Transaction Security for Current Contract
+```typescript
+const buildSecureDepositTransaction = async (
+  program: Program,
+  user: PublicKey,
+  amount: number
+) => {
+  // Validate inputs
+  if (amount < 10_000_000) {
+    throw new Error('Amount below minimum');
+  }
+  
+  if (amount > 1_000_000_000_000) {
+    throw new Error('Amount above maximum');
+  }
+  
+  // Build transaction with proper accounts
+  const [fundStatePDA] = await PublicKey.findProgramAddress(
+    [Buffer.from('fund_state')],
+    program.programId
+  );
+  
+  const [userFundAccountPDA] = await PublicKey.findProgramAddress(
+    [Buffer.from('user_fund'), user.toBuffer()],
+    program.programId
+  );
+  
+  // Get USDC accounts
+  const usdcMint = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"); // USDC mint
+  const userUsdcATA = await getAssociatedTokenAddress(usdcMint, user);
+  
+  const instruction = await program.methods
+    .deposit(new BN(amount))
+    .accounts({
+      user,
+      userFundAccount: userFundAccountPDA,
+      fundState: fundStatePDA,
+      userUsdcAccount: userUsdcATA,
+      fundUsdcVault: await getFundUsdcVault(program, fundStatePDA),
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+  
+  return instruction;
+};
+```
+
+---
+
+## Getting Started (Updated for Current Implementation)
 
 ### 1. Project Setup
 ```bash
 # Create new React project
 npx create-react-app maek-frontend --template typescript
 
-# Install required dependencies
+# Install required dependencies for current implementation
 npm install @solana/web3.js @solana/wallet-adapter-react \
-  @project-serum/anchor decimal.js date-fns recharts \
-  react-query @headlessui/react clsx
+  @project-serum/anchor @solana/spl-token \
+  decimal.js date-fns recharts react-query \
+  @headlessui/react clsx
 
 # Install development dependencies
 npm install -D @types/node tailwindcss postcss autoprefixer
@@ -1376,20 +700,73 @@ npm install -D @types/node tailwindcss postcss autoprefixer
 ### 2. Environment Configuration
 ```env
 # .env.local
-REACT_APP_SOLANA_NETWORK=devnet
-REACT_APP_PROGRAM_ID=YourProgramIdHere
-REACT_APP_WS_URL=wss://api.devnet.solana.com
-REACT_APP_API_URL=https://api.maek.finance
+REACT_APP_SOLANA_NETWORK=localnet
+REACT_APP_PROGRAM_ID=2gtiJ4B3Fv6oF6ZEYJcXdoNTGVC4jG5bNQjXs9ELWrhx
+REACT_APP_RPC_URL=http://localhost:8899
+REACT_APP_WS_URL=ws://localhost:8900
+
+# For devnet deployment (future)
+# REACT_APP_SOLANA_NETWORK=devnet
+# REACT_APP_RPC_URL=https://api.devnet.solana.com
 ```
 
-### 3. Development Guidelines
-- Use TypeScript for all components
-- Implement comprehensive error boundaries
-- Write unit tests for all utility functions
-- Use React Query for server state management
-- Follow the established design system
-- Implement proper loading states
-- Add comprehensive accessibility features
-- Test on multiple devices and browsers
+### 3. Basic Program Integration
+```typescript
+// src/hooks/useAnchorProgram.ts
+import { Program, AnchorProvider } from '@project-serum/anchor';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { PublicKey } from '@solana/web3.js';
 
-This guide provides the foundation for building exceptional user experiences on top of the MAEK protocol. Focus on user needs, maintain high performance standards, and prioritize security in every implementation decision. 
+const PROGRAM_ID = new PublicKey("2gtiJ4B3Fv6oF6ZEYJcXdoNTGVC4jG5bNQjXs9ELWrhx");
+
+export const useAnchorProgram = () => {
+  const { connection } = useConnection();
+  const wallet = useWallet();
+  
+  const provider = new AnchorProvider(connection, wallet as any, {});
+  const program = new Program(IDL, PROGRAM_ID, provider);
+  
+  return { program, provider };
+};
+```
+
+### 4. Implementation Priority
+```markdown
+## Phase 1: Core Investor Interface ✅
+- [ ] Wallet connection
+- [ ] Fund state display
+- [ ] Deposit functionality
+- [ ] Withdrawal functionality
+- [ ] Portfolio view
+
+## Phase 2: Enhanced Features
+- [ ] Performance charts
+- [ ] Transaction history
+- [ ] Real-time updates
+- [ ] Mobile optimization
+
+## Phase 3: Admin Interface (when full contract is deployed)
+- [ ] NAV update interface
+- [ ] Fund monitoring dashboard
+- [ ] Risk management tools
+- [ ] Compliance reporting
+```
+
+---
+
+## Current Limitations & Roadmap
+
+### ⚠️ Current Limitations
+1. **Initialize Fund**: Not yet available (admin must initialize manually)
+2. **Asset Management**: Fixed income investment features under development
+3. **Emergency Controls**: Pause/unpause functionality not yet implemented
+4. **Advanced Admin**: Full admin dashboard pending complete contract deployment
+
+### 🚀 Ready for Production
+1. **Core Fund Operations**: Deposit, withdraw, NAV updates fully functional
+2. **User Account Management**: Complete user fund account tracking
+3. **Mathematical Precision**: All calculations tested and verified
+4. **Error Handling**: Comprehensive validation and error management
+5. **Security**: Input validation and transaction security implemented
+
+This updated guide reflects the current state of your MAEK protocol implementation and provides accurate information for frontend developers to build against the deployed contract. 

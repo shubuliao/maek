@@ -56,21 +56,25 @@
     "@coral-xyz/anchor": "^0.28.0",
     "@solana/web3.js": "^1.78.0",
     "@types/node": "^20.0.0",
-    "typescript": "^5.0.0",
-    "prettier": "^3.0.0",
-    "eslint": "^8.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
+    "concurrently": "^8.0.0",
+    "eslint": "^8.0.0",
+    "http-server": "^14.0.0",
     "husky": "^8.0.0",
     "lint-staged": "^14.0.0",
+    "prettier": "^3.0.0",
     "typedoc": "^0.25.0",
-    "http-server": "^14.0.0",
-    "concurrently": "^8.0.0"
+    "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@solana/spl-token": "^0.3.8",
     "@project-serum/anchor": "^0.25.0",
-    "dotenv": "^16.0.0"
+    "@solana/spl-token": "^0.3.8",
+    "crypto-browserify": "^3.12.1",
+    "dotenv": "^16.0.0",
+    "os-browserify": "^0.3.0",
+    "path-browserify": "^1.0.1",
+    "stream-browserify": "^3.0.0"
   },
   "husky": {
     "hooks": {
@@ -94,4 +98,4 @@
     "type": "community",
     "url": "https://github.com/sponsors/maek-finance"
   }
-} 
+}
